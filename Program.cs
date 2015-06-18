@@ -15,6 +15,8 @@ namespace PrinterService
                     sc.WhenStarted(s => s.Start());
                     sc.WhenStopped(s => s.Stop());
                 });
+
+                x.SetDisplayName("Remote Printer Service");
             });
         }
     }

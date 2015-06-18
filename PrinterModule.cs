@@ -2,6 +2,7 @@
 using Nancy.ModelBinding;
 using PrinterService.Model;
 using System.Collections.Generic;
+using System.Configuration;
 
 namespace PrinterService
 {
@@ -9,18 +10,21 @@ namespace PrinterService
     {
         public PrinterModule()
         {
-            Post["/print"] = parameters =>
+            Post["/print", true] = async (ctx, ct) =>
             {
                 var request = this.Bind<PrintRequest>();
 
-                Printer printer = new Printer("Hengstler Extendo X56");
-
+                var client = new Downloader();
                 foreach (var cookie in request.Cookies)
                 {
-                    printer.SetCookie(cookie.Key, cookie.Value);
+                    client.AddCookie(cookie.Key, cookie.Value);
                 }
 
-                printer.PrintPdf(request.Url);
+                byte[] pdf = await client.DownloadPDF(request.Url);
+
+
+                Printer printer = new Printer(ConfigurationManager.AppSettings["servicePrinter"]);
+                printer.PrintPdf(pdf);
 
                 return Response.AsJson<PrintOutcome>(new PrintOutcome()
                 {

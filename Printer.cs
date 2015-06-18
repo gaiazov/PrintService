@@ -1,5 +1,4 @@
-﻿using Flurl.Http;
-using Ghostscript.NET.Rasterizer;
+﻿using Ghostscript.NET.Rasterizer;
 using iTextSharp.text.pdf;
 using iTextSharp.text.pdf.parser;
 using System;
@@ -7,7 +6,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Printing;
 using System.IO;
-using System.Linq;
 
 namespace PrinterService
 {
@@ -15,10 +13,8 @@ namespace PrinterService
     {
         private PrintDocument _printer;
 
-        private List<Bitmap> _pages;
-        private int _pageNum = 0;
-
-        private Dictionary<string, string> _cookies = new Dictionary<string, string>();
+        [Obsolete("Find a way to pass this in the event")]
+        private Bitmap _currentImage;
 
         public Printer(string printerName)
         {
@@ -36,30 +32,72 @@ namespace PrinterService
                 }
             };
 
-            _printer.PrintPage += new PrintPageEventHandler(PrintPage);
+            _printer.PrintPage += (printer, args) =>
+            {
+                PrintImage(_currentImage, args);
+            };
         }
 
-        public void SetCookie(string name, string value)
+        /// <summary>
+        /// Prints a PDF document.
+        /// </summary>
+        /// <param name="document">The PDF document.</param>
+        public void PrintPdf(byte[] document)
         {
-            _cookies.Add(name, value);
+            var preparedDocument = PreparePdfForPrinting(document);
+            var pages = RasterizePDF(preparedDocument, 203);
+            
+            foreach (var page in pages)
+            {
+                PrintSingleImage(page);
+            }
         }
 
-        public void PrintPdf(string url)
+        #region Private Methods
+        /// <summary>
+        /// Rasterizes the PDF document into images.
+        /// </summary>
+        /// <param name="document">The data.</param>
+        /// <returns></returns>
+        private IList<Bitmap> RasterizePDF(byte[] document, int dpi)
         {
-            var bufferTask = new FlurlClient(url)
-                .WithCookies(_cookies)
-                .GetBytesAsync();
+            var pages = new List<Bitmap>();
 
-            var buffer = bufferTask.Result;
+            using (var rasterizer = new GhostscriptRasterizer())
+            {
+                using (var ms = new MemoryStream(document))
+                {
+                    rasterizer.Open(ms);
 
-            int desired_x_dpi = 203;
-            int desired_y_dpi = 203;
+                    int numPages = rasterizer.PageCount;
+                    for (int pageNumber = 1; pageNumber <= numPages; pageNumber++)
+                    {
+                        var img = rasterizer.GetPage(dpi, dpi, pageNumber);
+                        pages.Add(new Bitmap(img));
+                    }
+                }
+            }
 
-            _pages = new List<Bitmap>();
+            return pages;
+        }
 
+        /// <summary>
+        /// Prepares the PDF for printing on the thermal printer
+        /// 
+        /// All this does is crop every page to a tigher bounding box
+        /// The bounding box is calcuated using TextMarginFinder
+        /// 
+        /// This is nessesary because Report Services cannot produce different
+        /// page size for each page. Eventually this step will be done on the server
+        /// and the server will send a PDF that is already prepared
+        /// </summary>
+        /// <param name="pdfData">The PDF.</param>
+        /// <returns></returns>
+        private byte[] PreparePdfForPrinting(byte[] pdfData)
+        {
             using (var memoryStream = new MemoryStream())
             {
-                PdfReader reader = new PdfReader(buffer);
+                PdfReader reader = new PdfReader(pdfData);
                 using (PdfStamper stamper = new PdfStamper(reader, memoryStream))
                 {
                     PdfReaderContentParser parser = new PdfReaderContentParser(reader);
@@ -78,83 +116,49 @@ namespace PrinterService
                     }
                 }
 
-                buffer = memoryStream.GetBuffer();
-            }
-
-
-            using (GhostscriptRasterizer rasterizer = new GhostscriptRasterizer())
-            {
-                MemoryStream ms = new MemoryStream(buffer);
-
-                rasterizer.Open(ms);
-
-                for (int pageNumber = 1; pageNumber <= rasterizer.PageCount; pageNumber++)
-                {
-                    var img = rasterizer.GetPage(desired_x_dpi, desired_y_dpi, pageNumber);
-                    _pages.Add(new Bitmap(img));
-                }
-            }
-            
-            for (int i = 0; i < _pages.Count(); i++)
-            {
-                PrintSinglePage(i);
+                return memoryStream.GetBuffer();
             }
         }
 
-        private void PrintSinglePage(int pageNum)
+        /// <summary>
+        /// Prints the single image.
+        /// </summary>
+        /// <param name="image">The image.</param>
+        private void PrintSingleImage(Bitmap image)
         {
-            Console.WriteLine("Printing Single Page");
-            _pageNum = pageNum;
+            _currentImage = image;
 
-            var image = _pages[pageNum];
+            Console.Write("Printing Single Page... ");
 
             float heightInches = image.Height / 203f;
             float widthInches = image.Width / 203f;
 
-            var pagePaperSize = new PaperSize("Page " + 0 + " Custom Size", (int)(widthInches * 100), (int)(heightInches * 100));
+            var pagePaperSize = new PaperSize("Page Custom Size", (int)(widthInches * 100), (int)(heightInches * 100));
             _printer.DefaultPageSettings.PaperSize = pagePaperSize;
             _printer.Print();
-            Console.WriteLine("Printing Single Page.... Done");
+            Console.WriteLine("Done!");
         }
 
+        /// <summary>
+        /// Prints the image. Gets called by the PrintDocument PrintPage event
+        /// </summary>
+        /// <param name="image">The image.</param>
+        /// <param name="args">The <see cref="PrintPageEventArgs"/> instance containing the event data.</param>
         private void PrintImage(Bitmap image, PrintPageEventArgs args)
         {
-            float aspectRatio = image.Height / (float)image.Width;
-
             Graphics g = args.Graphics;
 
+            float aspectRatio = image.Height / (float)image.Width;
             float height = g.VisibleClipBounds.Width * aspectRatio;
             float width = g.VisibleClipBounds.Width;
 
             g.DrawImage(image, 0.0f, 0.0f, width, height);
 
-            // draw a line at the bottom of the image
-            // so the printer scrolls to it
+            // draw a small line at the *VERY* bottom of the image
+            // so the thermal printer scrolls to it
             // white space at the end of the printed page causes issues
-            g.DrawLine(new Pen(Color.Gray), 0, height, width/10, height);
+            g.DrawLine(new Pen(Color.Gray), 0, height, width / 10, height);
         }
-
-        private void PrintPage(object sender, PrintPageEventArgs args)
-        {
-            Console.WriteLine("Page " + (_pageNum + 1));
-
-            var bitmap = _pages[_pageNum];
-
-            // set NEXT page size
-            {
-                if ((_pageNum + 1) < _pages.Count())
-                {
-                    var bitmapNext = _pages[_pageNum + 1];
-
-                    float heightInches = bitmapNext.Height / 203f;
-                    float widthInches = bitmapNext.Width / 203f;
-
-                    var pagePaperSize = new PaperSize("Page " + _pageNum + 1 + " Custom Size", (int)(widthInches * 100), (int)(heightInches * 100));
-                    args.PageSettings.PaperSize = pagePaperSize;
-                }
-            }
-
-            PrintImage(bitmap, args);
-        }
+        #endregion
     }
 }

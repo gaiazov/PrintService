@@ -1,5 +1,6 @@
 ﻿using Nancy.Hosting.Self;
 using System;
+using System.Configuration;
 
 namespace PrinterService
 {
@@ -9,7 +10,9 @@ namespace PrinterService
 
         public void Start()
         {
-            _nancyHost = new NancyHost(new Uri("http://localhost:1234"));
+            Nancy.StaticConfiguration.DisableErrorTraces = false;
+
+            _nancyHost = new NancyHost(new Uri(ConfigurationManager.AppSettings["serviceUrl"]));
             _nancyHost.Start();
         }
 
