@@ -1,7 +1,6 @@
 ﻿using Nancy;
 using Nancy.ModelBinding;
 using PrinterService.Model;
-using System.Collections.Generic;
 using System.Configuration;
 
 namespace PrinterService

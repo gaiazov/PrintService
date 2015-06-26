@@ -11,7 +11,7 @@ namespace PrinterService
 {
     public class Printer
     {
-        private PrintDocument _printer;
+        private readonly PrintDocument _printer;
 
         [Obsolete("Find a way to pass this in the event")]
         private Bitmap _currentImage;
@@ -45,7 +45,7 @@ namespace PrinterService
         public void PrintPdf(byte[] document)
         {
             var preparedDocument = PreparePdfForPrinting(document);
-            var pages = RasterizePDF(preparedDocument, 203);
+            var pages = RasterizePdf(preparedDocument, 203);
             
             foreach (var page in pages)
             {
@@ -59,7 +59,7 @@ namespace PrinterService
         /// </summary>
         /// <param name="document">The data.</param>
         /// <returns></returns>
-        private IList<Bitmap> RasterizePDF(byte[] document, int dpi)
+        private static IEnumerable<Bitmap> RasterizePdf(byte[] document, int dpi)
         {
             var pages = new List<Bitmap>();
 
@@ -93,29 +93,24 @@ namespace PrinterService
         /// </summary>
         /// <param name="pdfData">The PDF.</param>
         /// <returns></returns>
-        private byte[] PreparePdfForPrinting(byte[] pdfData)
+        private static byte[] PreparePdfForPrinting(byte[] pdfData)
         {
             using (var memoryStream = new MemoryStream())
             {
-                PdfReader reader = new PdfReader(pdfData);
-                using (PdfStamper stamper = new PdfStamper(reader, memoryStream))
+                var reader = new PdfReader(pdfData);
+                var parser = new PdfReaderContentParser(reader);
+
+                var n = reader.NumberOfPages;
+                for (var i = 1; i <= n; i++)
                 {
-                    PdfReaderContentParser parser = new PdfReaderContentParser(reader);
+                    var finder = parser.ProcessContent(i, new TextMarginFinder());
+                    var cropBox = reader.GetCropBox(i);
 
-                    int n = reader.NumberOfPages;
-                    for (int i = 1; i <= n; i++)
-                    {
+                    var margin = finder.GetLlx();
 
-                        TextMarginFinder finder = parser.ProcessContent(i, new TextMarginFinder());
-                        var cropBox = reader.GetCropBox(i);
-
-                        var margin = finder.GetLlx();
-
-                        cropBox.Bottom = finder.GetLly() - margin;
-                        reader.GetPageN(i).Put(PdfName.CROPBOX, new PdfRectangle(cropBox));
-                    }
+                    cropBox.Bottom = finder.GetLly() - margin;
+                    reader.GetPageN(i).Put(PdfName.CROPBOX, new PdfRectangle(cropBox));
                 }
-
                 return memoryStream.GetBuffer();
             }
         }
@@ -130,8 +125,8 @@ namespace PrinterService
 
             Console.Write("Printing Single Page... ");
 
-            float heightInches = image.Height / 203f;
-            float widthInches = image.Width / 203f;
+            var heightInches = image.Height / 203f;
+            var widthInches = image.Width / 203f;
 
             var pagePaperSize = new PaperSize("Page Custom Size", (int)(widthInches * 100), (int)(heightInches * 100));
             _printer.DefaultPageSettings.PaperSize = pagePaperSize;
