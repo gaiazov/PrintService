@@ -19,17 +19,16 @@ namespace PrinterService
                     client.AddCookie(cookie.Key, cookie.Value);
                 }
 
-                byte[] pdf = await client.DownloadPDF(request.Url);
+                var pdf = await client.DownloadUrl(request.Url);
 
-
-                Printer printer = new Printer(ConfigurationManager.AppSettings["servicePrinter"]);
+                var printer = new Printer(ConfigurationManager.AppSettings["servicePrinter"]);
                 printer.PrintPdf(pdf);
 
-                return Response.AsJson<PrintOutcome>(new PrintOutcome()
+                return Response.AsJson(new PrintOutcome()
                 {
                     Printed = true,
                     Message = "Printed Successfully"
-                }, HttpStatusCode.OK);
+                });
             };
         }
     }

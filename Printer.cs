@@ -13,7 +13,7 @@ namespace PrinterService
     {
         private readonly PrintDocument _printer;
 
-        [Obsolete("Find a way to pass this in the event")]
+        // Find a way to pass this in the event
         private Bitmap _currentImage;
 
         public Printer(string printerName)
@@ -57,7 +57,8 @@ namespace PrinterService
         /// <summary>
         /// Rasterizes the PDF document into images.
         /// </summary>
-        /// <param name="document">The data.</param>
+        /// <param name="document">The PDF document.</param>
+        /// <param name="dpi">The dpi.</param>
         /// <returns></returns>
         private static IEnumerable<Bitmap> RasterizePdf(byte[] document, int dpi)
         {
@@ -69,8 +70,8 @@ namespace PrinterService
                 {
                     rasterizer.Open(ms);
 
-                    int numPages = rasterizer.PageCount;
-                    for (int pageNumber = 1; pageNumber <= numPages; pageNumber++)
+                    var numPages = rasterizer.PageCount;
+                    for (var pageNumber = 1; pageNumber <= numPages; pageNumber++)
                     {
                         var img = rasterizer.GetPage(dpi, dpi, pageNumber);
                         pages.Add(new Bitmap(img));
@@ -139,13 +140,13 @@ namespace PrinterService
         /// </summary>
         /// <param name="image">The image.</param>
         /// <param name="args">The <see cref="PrintPageEventArgs"/> instance containing the event data.</param>
-        private void PrintImage(Bitmap image, PrintPageEventArgs args)
+        private static void PrintImage(Image image, PrintPageEventArgs args)
         {
-            Graphics g = args.Graphics;
+            var g = args.Graphics;
 
-            float aspectRatio = image.Height / (float)image.Width;
-            float height = g.VisibleClipBounds.Width * aspectRatio;
-            float width = g.VisibleClipBounds.Width;
+            var aspectRatio = image.Height / (float)image.Width;
+            var height = g.VisibleClipBounds.Width * aspectRatio;
+            var width = g.VisibleClipBounds.Width;
 
             g.DrawImage(image, 0.0f, 0.0f, width, height);
 
