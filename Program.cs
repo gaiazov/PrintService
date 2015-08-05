@@ -4,7 +4,7 @@ namespace PrinterService
 {
     class Program
     {
-        static void Main(string[])
+        static void Main()
         {
             HostFactory.Run(x =>
             {

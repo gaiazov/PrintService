@@ -46,7 +46,7 @@ namespace PrinterService
         {
             var preparedDocument = PreparePdfForPrinting(document);
             var pages = RasterizePdf(preparedDocument, 203);
-            
+
             foreach (var page in pages)
             {
                 PrintSingleImage(page);
@@ -54,6 +54,7 @@ namespace PrinterService
         }
 
         #region Private Methods
+
         /// <summary>
         /// Rasterizes the PDF document into images.
         /// </summary>
@@ -96,24 +97,25 @@ namespace PrinterService
         /// <returns></returns>
         private static byte[] PreparePdfForPrinting(byte[] pdfData)
         {
-            using (var memoryStream = new MemoryStream())
+            var output = new byte[pdfData.Length];
+            Array.Copy(pdfData, output, pdfData.Length);
+
+            var reader = new PdfReader(output);
+            var parser = new PdfReaderContentParser(reader);
+
+            var n = reader.NumberOfPages;
+            for (var i = 1; i <= n; i++)
             {
-                var reader = new PdfReader(pdfData);
-                var parser = new PdfReaderContentParser(reader);
+                var finder = parser.ProcessContent(i, new TextMarginFinder());
+                var cropBox = reader.GetCropBox(i);
 
-                var n = reader.NumberOfPages;
-                for (var i = 1; i <= n; i++)
-                {
-                    var finder = parser.ProcessContent(i, new TextMarginFinder());
-                    var cropBox = reader.GetCropBox(i);
+                var margin = finder.GetLlx();
 
-                    var margin = finder.GetLlx();
-
-                    cropBox.Bottom = finder.GetLly() - margin;
-                    reader.GetPageN(i).Put(PdfName.CROPBOX, new PdfRectangle(cropBox));
-                }
-                return memoryStream.GetBuffer();
+                cropBox.Bottom = finder.GetLly() - margin;
+                reader.GetPageN(i).Put(PdfName.CROPBOX, new PdfRectangle(cropBox));
             }
+
+            return output;
         }
 
         /// <summary>
